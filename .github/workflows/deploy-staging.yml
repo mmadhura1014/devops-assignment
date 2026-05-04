@@ -73,4 +73,4 @@ jobs:
       - name: Verify deployment
         run: |
           sleep 15
-          curl -f http://${{ secrets.EC2_HOST }}:3000/health || exit 1
+          curl -f http://devops-assignment-alb-1002883146.us-east-1.elb.amazonaws.com/health || exit 1
