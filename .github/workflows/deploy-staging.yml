@@ -63,6 +63,12 @@ jobs:
               --region us-east-1 \
               --query SecretString \
               --output text | python3 -c "import sys,json; print(json.load(sys.stdin)['password'])")
+
+            DB_HOST=$(aws rds describe-db-instances \
+              --region us-east-1 \
+              --query 'DBInstances[0].Endpoint.Address' \
+              --output text)
+              --output text | python3 -c "import sys,json; print(json.load(sys.stdin)['password'])")
             docker run -d \
               --name app \
               --restart always \
@@ -72,7 +78,7 @@ jobs:
               --log-opt awslogs-group=/ec2/devops-assignment/app \
               --log-opt awslogs-stream=$(curl -s http://169.254.169.254/latest/meta-data/instance-id) \
               -e NODE_ENV=staging \
-              -e DB_HOST=devops-assignment-db.c1z3l4m5n6o7.us-east-1.rds.amazonaws.com \
+              -e DB_HOST=$DB_HOST \
               -e DB_USER=dbadmin \
               -e DB_PASSWORD=$DB_PASS \
               -e DB_NAME=appdb \
