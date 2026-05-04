@@ -74,12 +74,3 @@ jobs:
         run: |
           sleep 15
           curl -f http://${{ secrets.EC2_HOST }}:3000/health || exit 1
-
-      - name: Notify Slack on failure
-        if: failure()
-        uses: slackapi/slack-github-action@v2
-        with:
-          webhook: ${{ secrets.SLACK_WEBHOOK_URL }}
-          webhook-type: incoming-webhook
-          payload: |
-            {"text": "❌ Staging deploy failed on `${{ github.repository }}` — commit `${{ github.sha }}`"}
