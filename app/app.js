@@ -10,6 +10,7 @@ const pool = new Pool({
     password: process.env.DB_PASSWORD || 'password',
     database: process.env.DB_NAME || 'appdb',
     port: process.env.DB_PORT || 5432,
+    ssl: { rejectUnauthorized: false }
 });
 
 // Health check endpoint required by the AWS Application Load Balancer
