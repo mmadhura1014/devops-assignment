@@ -1,0 +1,85 @@
+name: Deploy to staging
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  build-and-push:
+    name: Build and push Docker image
+    runs-on: ubuntu-latest
+    outputs:
+      image_tag: ${{ steps.meta.outputs.version }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Docker metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ secrets.DOCKERHUB_USERNAME }}/devops-app
+          tags: |
+            type=sha,prefix=,format=short
+
+      - uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - uses: docker/build-push-action@v5
+        with:
+          context: ./app
+          platforms: linux/amd64
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+
+      - name: Scan image with Trivy
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: ${{ secrets.DOCKERHUB_USERNAME }}/devops-app:${{ steps.meta.outputs.version }}
+          severity: HIGH,CRITICAL
+          exit-code: '0'
+
+  deploy-staging:
+    name: Deploy to EC2
+    needs: build-and-push
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: SSH deploy to EC2
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ec2-user
+          key: ${{ secrets.EC2_SSH_KEY }}
+          script: |
+            IMAGE="${{ secrets.DOCKERHUB_USERNAME }}/devops-app:${{ needs.build-and-push.outputs.image_tag }}"
+            docker pull $IMAGE
+            docker stop app 2>/dev/null || true
+            docker rm   app 2>/dev/null || true
+            docker run -d \
+              --name app \
+              --restart always \
+              -p 3000:3000 \
+              --log-driver=awslogs \
+              --log-opt awslogs-region=us-east-1 \
+              --log-opt awslogs-group=/ec2/devops-assignment/app \
+              --log-opt awslogs-stream=$(curl -s http://169.254.169.254/latest/meta-data/instance-id) \
+              -e NODE_ENV=staging \
+              $IMAGE
+            docker image prune -f
+
+      - name: Verify deployment
+        run: |
+          sleep 15
+          curl -f http://${{ secrets.EC2_HOST }}:3000/health || exit 1
+
+      - name: Notify Slack on failure
+        if: failure()
+        uses: slackapi/slack-github-action@v2
+        with:
+          webhook: ${{ secrets.SLACK_WEBHOOK_URL }}
+          webhook-type: incoming-webhook
+          payload: |
+            {"text": "❌ Staging deploy failed on `${{ github.repository }}` — commit `${{ github.sha }}`"}
